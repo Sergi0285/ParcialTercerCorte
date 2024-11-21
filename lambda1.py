@@ -10,7 +10,7 @@ URLS = {
 }
 
 
-# Configuración del bucket de S3
+# Configuración del bucket de S3 
 S3_BUCKET = "parcialtri"  # Cambia esto por tu bucket de S3
 S3_PATH = "headlines/raw/"  # La carpeta dentro del bucket
 
