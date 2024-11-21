@@ -1,0 +1,36 @@
+{
+    "dev": {
+        "app_function": "procesador.lambda_recive",
+        "aws_region": "us-east-1",
+        "exclude": [
+            "boto3",
+            "dateutil",
+            "botocore",
+            "s3transfer",
+            "concurrent"
+        ],
+        "profile_name": "default",
+        "project_name": "parcial",
+        "runtime": "python3.9",
+        "s3_bucket": "zappa-ak7w2xy9r",
+        "keep_warm": false,
+        "apigateway_enabled": false,
+        "manage_roles": false,
+        "role_name": "LabRole",
+        "events": [
+            {
+                "function": "procesador.lambda_recive",
+                "event_source": {
+                    "arn": "arn:aws:s3:::parcialtri",
+                    "events": ["s3:ObjectCreated:*"],
+                    "filters": [
+                        {
+                            "Prefix": "headlines/raw/",
+                            "Suffix": ".html"
+                        }
+                    ]
+                }
+            }
+        ]
+    }
+}
