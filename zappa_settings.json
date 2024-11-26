@@ -10,7 +10,7 @@
             "concurrent"
         ],
         "profile_name": "default",
-        "project_name": "parcial",
+        "project_name": "parcial2",
         "runtime": "python3.9",
         "s3_bucket": "zappa-ak7w2xy9r",
         "keep_warm": false,
