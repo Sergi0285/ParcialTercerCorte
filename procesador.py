@@ -1,118 +1,145 @@
 import boto3
-import csv
 from bs4 import BeautifulSoup
-from io import StringIO
-from urllib.parse import unquote_plus
 
-# Configuración del bucket de S3
-S3_BUCKET = "parcialtri"  # Cambia esto por tu bucket de S3
-FINAL_PATH = "headlines/final/"  # Carpeta destino para los CSV procesados
-
-# Cliente de S3
+# Inicializar cliente S3
 s3 = boto3.client('s3')
 
-def process_file(bucket_name, key):
+def detect_newspaper(key, soup):
     """
-    Procesa un archivo HTML descargado desde S3 y guarda un CSV en la estructura especificada.
-    
-    Args:
-        bucket_name (str): Nombre del bucket S3.
-        key (str): Clave del archivo HTML en S3.
+    Detecta el periódico basado en el nombre del archivo o la estructura del HTML.
     """
-    print(f"Procesando archivo: {key}")
+    if "portafolio" in key:
+        return "portafolio"
+    elif "eltiempo" in key:
+        return "eltiempo"
 
+    # Heurística basada en estructuras HTML
+    if soup.find('article', class_='c-article'):  # El Tiempo
+        return "eltiempo"
+    elif soup.find('article'):  # Portafolio
+        return "portafolio"
+    else:
+        return "desconocido"
+
+def extract_headlines_portafolio(soup):
+    """
+    Extrae titulares, categorías y enlaces del sitio web de Portafolio.
+    """
+    headlines = []
+    for article in soup.find_all('article'):
+        category = article.get('data-category', None)
+        if not category:
+            category_tag = article.find('p', class_='tarjeta__categoria')
+            category = category_tag.get_text(strip=True) if category_tag else "Sin categoria"
+
+        title = article.get('data-name', None)
+        if not title:
+            title_tag = article.find('p', class_='tarjeta__titulo')
+            title = title_tag.get_text(strip=True) if title_tag else "Sin titular"
+
+        title = '"' + title.replace('"', '""') + '"'
+
+        link = "Sin enlace"
+        link_tag = article.find('a', href=True)
+        if link_tag:
+            link = "https://www.portafolio.co" + link_tag['href'] if link_tag['href'].startswith("/") else link_tag['href']
+
+        headlines.append((category, title, link))
+    return headlines
+
+def extract_headlines_eltiempo(soup):
+    """
+    Extrae titulares, categorías y enlaces del sitio web de El Tiempo.
+    """
+    headlines = []
+    for article in soup.find_all('article', class_='c-article'):
+        category = article.get('data-category', 'Sin categoría')
+
+        title_tag = None
+        title = article.get('data-name', None)
+        if not title:
+            title_tag = article.find('h3', class_='c-article__title')
+            title = title_tag.get_text(strip=True) if title_tag else "Sin titular"
+
+        title = '"' + title.replace('"', '""') + '"'
+
+        link = "Sin enlace"
+        if title_tag:
+            link_tag = title_tag.find('a')
+            if link_tag and 'href' in link_tag.attrs:
+                link = link_tag['href']
+
+        if link == "Sin enlace":
+            secondary_link_tag = article.find('a', href=True)
+            if secondary_link_tag:
+                link = secondary_link_tag['href']
+
+        headlines.append((category, title, link))
+    return headlines
+
+def process_and_store(bucket_name, key):
     try:
-        # Descargar el archivo HTML desde S3
-        html_content = s3.get_object(Bucket=bucket_name, Key=key)['Body'].read().decode('utf-8')
+        print(f"Procesando archivo: {key} desde el bucket: {bucket_name}")
 
-        # Parsear el HTML
+        response = s3.get_object(Bucket=bucket_name, Key=key)
+        html_content = response['Body'].read().decode('utf-8')
+
         soup = BeautifulSoup(html_content, 'html.parser')
 
-        # Identificar la fuente del archivo
-        if "portafolio" in key.lower():
-            # Procesar archivo de Portafolio
-            articles = []
-            for article in soup.find_all('article'):  # Cambiar según la estructura del HTML
-                title = article.find('h3')  # Las noticias están en etiquetas <h3>
-                link = article.find('a', href=True)
-                category_span = article.find('span', class_='category')  # La categoría está en un <span class="category">
-                category = category_span.get_text(strip=True) if category_span else 'Sin categoría'
+        newspaper = detect_newspaper(key, soup)
+        print(f"Periódico detectado: {newspaper}")
 
-                if title and link:
-                    articles.append({
-                        'category': category,
-                        'title': title.get_text(strip=True),
-                        'link': link['href']
-                    })
-
-        elif "eltiempo" in key.lower():
-            # Procesar archivo de El Tiempo
-            articles = []
-            for article in soup.find_all('div', class_='c-article'):  # Div con clase c-article contiene las noticias
-                title = article.find('h2')  # Título dentro de etiqueta <h2>
-                link = article.find('a', href=True)
-                category_div = article.find('div', class_='category')  # Categoría en <div class="category">
-                category = category_div.get_text(strip=True) if category_div else 'Sin categoría'
-
-                if title and link:
-                    articles.append({
-                        'category': category,
-                        'title': title.get_text(strip=True),
-                        'link': link['href']
-                    })
-
-        # Extraer información del nombre del archivo
-        try:
-            print(f"Dividiendo clave: {key}")
-            filename_parts = key.split('/')[-1].split('-')  # Separar por '-'
-            print(f"Partes del archivo: {filename_parts}")
-
-            if len(filename_parts) < 5:
-                raise ValueError("Nombre del archivo no tiene suficientes partes para procesar (se esperaban al menos 5).")
-
-            # Extraer fecha y periódico
-            date = filename_parts[1] + '-' + filename_parts[2] + '-' + filename_parts[3]
-            periodico = filename_parts[4].replace('.html', '')
-
-            # Validar formato de la fecha
-            year, month, day = date.split('-')
-            print(f"Fecha procesada: {year}-{month}-{day}, Periódico: {periodico}")
-
-        except ValueError as e:
-            print(f"Error al procesar la fecha o el nombre del archivo '{key}': {e}")
+        if newspaper == "portafolio":
+            headlines = extract_headlines_portafolio(soup)
+        elif newspaper == "eltiempo":
+            headlines = extract_headlines_eltiempo(soup)
+        else:
+            print(f"No se pudo determinar el periódico para el archivo {key}")
             return
 
-        # Generar la clave del CSV en la estructura requerida
-        csv_key = f"{FINAL_PATH}periodico={periodico}/year={year}/month={month}/day={day}/headlines.csv"
+        if key.startswith("headlines/raw/"):
+            filename = key.replace("headlines/raw/", "").replace(".html", "")
+            parts = filename.split("-")
 
-        # Crear CSV en memoria
-        csv_buffer = StringIO()
-        csv_writer = csv.DictWriter(csv_buffer, fieldnames=['category', 'title', 'link'])
-        csv_writer.writeheader()
-        csv_writer.writerows(articles)
+            print(f"Partes extraídas del nombre del archivo: {parts}")
 
-        # Subir el CSV a S3
-        s3.put_object(Bucket=bucket_name, Key=csv_key, Body=csv_buffer.getvalue())
-        print(f"Archivo CSV generado y guardado en S3: {csv_key}")
+            if len(parts) >= 4:  # Validar el formato del nombre
+                periodico = parts[0]
+                year, month, day = parts[1], parts[2], parts[3]
+                csv_key = f"headlines/final/periodico={periodico}/year={year}/month={month}/day={day}/headlines.csv"
+                print(f"Ruta generada para el archivo CSV: {csv_key}")
 
+                csv_buffer = "Categoría,Titular,Enlace\n"
+                for row in headlines:
+                    csv_buffer += ",".join(row) + "\n"
+
+                s3.put_object(Bucket=bucket_name, Key=csv_key, Body=csv_buffer, ContentType='text/csv')
+                print(f"Archivo CSV guardado exitosamente en {csv_key}")
+            else:
+                print(f"El nombre del archivo {filename} no tiene el formato esperado.")
+
+        else:
+            print(f"El archivo {key} no está en la carpeta 'raw/'.")
     except Exception as e:
-        print(f"Error al procesar el archivo {key}: {e}")
+        print(f"Error al procesar {key}: {e}")
 
 def lambda_recive(event, context):
-    """
-    Handler principal que procesa los eventos de S3.
-    """
-    print(f"Evento recibido: {event}")
-    
-    for record in event['Records']:
-        try:
-            bucket_name = record['s3']['bucket']['name']
-            key = unquote_plus(record['s3']['object']['key'])  # Decodificar la clave del archivo
-            if key.startswith('headlines/raw/') and key.endswith('.html'):
-                process_file(bucket_name, key)
-            else:
-                print(f"Archivo ignorado: {key}")
-        except Exception as e:
-            print(f"Error al procesar el evento {record}: {e}")
+    try:
+        print(f"Evento recibido: {event}")
 
-    return {"statusCode": 200, "body": "Archivos procesados correctamente"}
+        if "Records" in event and event["Records"]:
+            for record in event['Records']:
+                bucket_name = record['s3']['bucket']['name']
+                key = record['s3']['object']['key']
+
+                print(f"Registro recibido: Bucket={bucket_name}, Key={key}")
+
+                if key.startswith("headlines/raw/") and key.endswith(".html"):
+                    print(f"El archivo {key} está en la carpeta 'raw/' y es un archivo HTML.")
+                    process_and_store(bucket_name, key)
+                else:
+                    print(f"El archivo {key} no pertenece a la carpeta 'raw/' o no es un archivo HTML.")
+        else:
+            print("Evento no soportado o no relacionado con S3.")
+    except Exception as e:
+        print(f"Error general en Lambda: {e}")

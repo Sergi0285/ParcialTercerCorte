@@ -22,13 +22,23 @@
                 "function": "procesador.lambda_recive",
                 "event_source": {
                     "arn": "arn:aws:s3:::parcialtri",
-                    "events": ["s3:ObjectCreated:*"],
-                    "filters": [
-                        {
-                            "Prefix": "headlines/raw/",
-                            "Suffix": ".html"
+                    "events": [
+                        "s3:ObjectCreated:*"
+                    ],
+                    "filter": {
+                        "key": {
+                            "filter_rules": [
+                                {
+                                    "name": "prefix",
+                                    "value": "headlines/raw/"
+                                },
+                                {
+                                    "name": "suffix",
+                                    "value": ".html"
+                                }
+                            ]
                         }
-                    ]
+                    }
                 }
             }
         ]
