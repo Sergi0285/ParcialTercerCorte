@@ -28,19 +28,38 @@ def process_file(bucket_name, key):
         # Parsear el HTML
         soup = BeautifulSoup(html_content, 'html.parser')
 
-        # Extraer datos
-        articles = []
-        for article in soup.find_all('article'):  # Cambiar según la estructura del HTML
-            title = article.find('h2') or article.find('h3')  # Ejemplo: etiquetas h2/h3
-            link = article.find('a', href=True)
-            category = article.find('span', class_='category')  # Cambiar según la clase del sitio
+        # Identificar la fuente del archivo
+        if "portafolio" in key.lower():
+            # Procesar archivo de Portafolio
+            articles = []
+            for article in soup.find_all('article'):  # Cambiar según la estructura del HTML
+                title = article.find('h3')  # Las noticias están en etiquetas <h3>
+                link = article.find('a', href=True)
+                category_span = article.find('span', class_='category')  # La categoría está en un <span class="category">
+                category = category_span.get_text(strip=True) if category_span else 'Sin categoría'
 
-            if title and link:
-                articles.append({
-                    'category': category.get_text(strip=True) if category else 'Sin categoría',
-                    'title': title.get_text(strip=True),
-                    'link': link['href']
-                })
+                if title and link:
+                    articles.append({
+                        'category': category,
+                        'title': title.get_text(strip=True),
+                        'link': link['href']
+                    })
+
+        elif "eltiempo" in key.lower():
+            # Procesar archivo de El Tiempo
+            articles = []
+            for article in soup.find_all('div', class_='c-article'):  # Div con clase c-article contiene las noticias
+                title = article.find('h2')  # Título dentro de etiqueta <h2>
+                link = article.find('a', href=True)
+                category_div = article.find('div', class_='category')  # Categoría en <div class="category">
+                category = category_div.get_text(strip=True) if category_div else 'Sin categoría'
+
+                if title and link:
+                    articles.append({
+                        'category': category,
+                        'title': title.get_text(strip=True),
+                        'link': link['href']
+                    })
 
         # Extraer información del nombre del archivo
         try:
@@ -48,21 +67,20 @@ def process_file(bucket_name, key):
             filename_parts = key.split('/')[-1].split('-')  # Separar por '-'
             print(f"Partes del archivo: {filename_parts}")
 
-            # Comprobamos que el archivo tiene al menos 4 partes (contenido, año, mes, día)
             if len(filename_parts) < 5:
                 raise ValueError("Nombre del archivo no tiene suficientes partes para procesar (se esperaban al menos 5).")
 
-            # Extraemos la fecha (que está en las partes 1 a 3) y el periódico (parte 4)
+            # Extraer fecha y periódico
             date = filename_parts[1] + '-' + filename_parts[2] + '-' + filename_parts[3]
-            periodico = filename_parts[4].replace('.html', '')  # El nombre del periódico
+            periodico = filename_parts[4].replace('.html', '')
 
-            # Validar que la fecha tiene el formato esperado
-            year, month, day = date.split('-')  # Separar la fecha
+            # Validar formato de la fecha
+            year, month, day = date.split('-')
             print(f"Fecha procesada: {year}-{month}-{day}, Periódico: {periodico}")
 
         except ValueError as e:
             print(f"Error al procesar la fecha o el nombre del archivo '{key}': {e}")
-            return  # Terminar el procesamiento para este archivo
+            return
 
         # Generar la clave del CSV en la estructura requerida
         csv_key = f"{FINAL_PATH}periodico={periodico}/year={year}/month={month}/day={day}/headlines.csv"
