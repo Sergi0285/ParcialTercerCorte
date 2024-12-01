@@ -1,0 +1,53 @@
+{
+    "dev": {
+        "app_function": "cluster.lambda_handler",
+        "aws_region": "us-east-1",
+        "exclude": [
+            "boto3",
+            "dateutil",
+            "botocore",
+            "s3transfer",
+            "concurrent"
+        ],
+        "profile_name": "default",
+        "project_name": "cluster",
+        "runtime": "python3.9",
+        "s3_bucket": "zappa-hwzej0w58",
+        "keep_warm": false,
+        "apigateway_enabled": false,
+        "manage_roles": false,
+        "role_name": "LabRole",
+        "environment_variables": {
+            "S3_BUCKET": "parcialtri",
+            "EMR_ROLE": "EMR_EC2_DefaultRole",
+            "EMR_SERVICE_ROLE": "EMR_DefaultRole"
+        },
+        "policy": {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Action": [
+                        "s3:GetObject",
+                        "s3:PutObject",
+                        "s3:ListBucket"
+                    ],
+                    "Resource": [
+                        "arn:aws:s3:::parcialtri",
+                        "arn:aws:s3:::parcialtri/*"
+                    ]
+                },
+                {
+                    "Effect": "Allow",
+                    "Action": [
+                        "elasticmapreduce:*",
+                        "logs:*",
+                        "cloudwatch:*",
+                        "ec2:*"
+                    ],
+                    "Resource": "*"
+                }
+            ]
+        }
+    }
+}
