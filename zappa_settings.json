@@ -1,6 +1,6 @@
 {
     "dev": {
-        "app_function": "cluster.lambda_handler",
+        "app_function": "cluster.lambda_handler",  # Asegúrate de que esta sea la ruta correcta a tu función Lambda
         "aws_region": "us-east-1",
         "exclude": [
             "boto3",
@@ -48,6 +48,12 @@
                     "Resource": "*"
                 }
             ]
-        }
+        },
+        "events": [
+            {
+                "function": "cluster.lambda_handler",  # Ruta correcta a la función Lambda
+                "expression": "cron(0 2 * * ? *)"  # Ejecución diaria a las 2 AM UTC
+            }
+        ]
     }
 }
