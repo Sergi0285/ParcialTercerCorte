@@ -4,7 +4,7 @@ import time
 # Información directamente proporcionada del clúster en ejecución
 CLUSTER_ID = 'j-CN685OWRABYO'  # ID del clúster
 LOG_URI = 's3n://aws-logs-192272991520-us-east-1/elasticmapreduce/'  # Ruta de logs de S3
-SCRIPT_PATH = 's3://aws-emr-studio-192272991520-us-east-1/1730387024458/e-7K9W2KAO3GV4Q4NQVQUFQLAP7/parcialSpark.ipynb'  # Ruta al script PySpark en S3
+SCRIPT_PATH = 's3://aws-emr-studio-192272991520-us-east-1/1730387024458/e-7K9W2KAO3GV4Q4NQVQUFQLAP7/parcialspark.py'  # Ruta al script Python en S3
 INSTANCE_TYPE = 'm5.xlarge'  # Tipo de instancia para master y slave
 INSTANCE_COUNT = 3  # Número de instancias
 SERVICE_ROLE = 'arn:aws:iam::192272991520:role/EMR_DefaultRole'  # Rol de servicio de EMR
@@ -13,7 +13,9 @@ INSTANCE_PROFILE = 'EMR_EC2_DefaultRole'  # Perfil de instancia EC2 (solo el nom
 # Cliente de Boto3
 emr_client = boto3.client('emr', region_name='us-east-1')
 
-# Función para crear un nuevo clúster usando los datos proporcionados
+# Ruta al script de bootstrap en S3 (instalar Papermill si fuera necesario)
+BOOTSTRAP_SCRIPT_PATH = 's3://parcialtri/driver/bootstrap.sh'
+
 def create_cluster():
     cluster_config = {
         'MasterInstanceType': INSTANCE_TYPE,
@@ -23,7 +25,9 @@ def create_cluster():
         'ReleaseLabel': 'emr-6.9.0',  # Versión de EMR
         'Applications': [
             {'Name': 'Spark'},
-            {'Name': 'Hadoop'}
+            {'Name': 'Hadoop'},
+            {'Name': 'JupyterHub'},
+            {'Name': 'JupyterEnterpriseGateway'}
         ],
         'TerminationProtected': False
     }
@@ -45,6 +49,15 @@ def create_cluster():
             'EmrManagedMasterSecurityGroup': 'sg-0cbc2610998f2afe0',
             'EmrManagedSlaveSecurityGroup': 'sg-062e297b0f91258eb',
         },
+        BootstrapActions=[
+            {
+                'Name': 'Install Spark and Dependencies',
+                'ScriptBootstrapAction': {
+                    'Path': BOOTSTRAP_SCRIPT_PATH,
+                    'Args': []  # Puedes incluir argumentos si tu script los necesita
+                }
+            }
+        ],
         ServiceRole=SERVICE_ROLE,  # Rol de servicio de EMR
         Steps=[{
             'Name': 'Run PySpark Job',
@@ -62,8 +75,7 @@ def create_cluster():
                     '--conf', 'spark.hadoop.fs.s3a.aws.credentials.provider=com.amazonaws.auth.DefaultAWSCredentialsProviderChain',
                     '--conf', 'spark.sql.shuffle.partitions=50',
                     '--conf', 'spark.sql.parquet.writeLegacyFormat=true',
-                    '--packages', 'org.apache.hadoop:hadoop-aws:3.3.1',
-                    SCRIPT_PATH
+                    SCRIPT_PATH  # Ruta al archivo Python en S3
                 ]
             }
         }],
